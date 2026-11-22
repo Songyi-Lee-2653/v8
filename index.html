@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>대칭 탐구 연구소: 도형 이름 맞히기와 대칭 규칙 검사 (학생용)</title>
+  <!-- [필수 규정] 티처블머신 호환을 위해 tfjs 1.3.1 및 tmImage 0.8 버전 고정 유지 -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+  <style>
+    :root {
+      --bg-color: #f1f5f9;
+      --card-bg: #ffffff;
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --green: #059669;
+      --amber: #d97706;
+      --text-main: #0f172a;
+      --text-sub: #475569;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      padding: 18px;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1140px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      background: var(--card-bg);
+      padding: 20px;
+      border-radius: 18px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      margin-bottom: 18px;
+    }
+
+    h1 { font-size: 1.75rem; color: var(--primary); margin-bottom: 8px; }
+    .subtitle {
+      font-size: 1.02rem;
+      color: #1e293b;
+      background: #f8fafc;
+      display: inline-block;
+      padding: 10px 18px;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      margin-bottom: 10px;
+    }
+    .badge-row { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .privacy-badge { background: #e0e7ff; color: #3730a3; padding: 5px 14px; border-radius: 999px; font-size: 0.85rem; font-weight: 700; }
+    .nav-link { color: var(--primary); font-weight: 700; font-size: 0.9rem; text-decoration: none; }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 440px 1fr;
+      gap: 18px;
+    }
+
+    @media (max-width: 920px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+      margin-bottom: 18px;
+    }
+
+    .card-title {
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: #1e293b;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .mode-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+    .btn {
+      padding: 10px 12px; font-size: 0.9rem; font-weight: 700;
+      border: none; border-radius: 10px; cursor: pointer; transition: all 0.15s; text-align: center;
+    }
+    .btn-primary { background: var(--primary); color: #fff; font-size: 0.95rem; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary { background: #e2e8f0; color: #1e293b; }
+    .btn-secondary:hover { background: #cbd5e1; }
+    .btn-secondary.active { background: #1e293b; color: #fff; }
+
+    .canvas-wrapper {
+      position: relative; width: 360px; height: 360px; margin: 0 auto 12px;
+      border: 3px solid #94a3b8; border-radius: 12px; overflow: hidden; background-color: #ffffff;
+      background-image: linear-gradient(to right, #e2e8f0 1px, transparent 1px), linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+      background-size: 20px 20px; touch-action: none;
+    }
+
+    #drawCanvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+    #overlayCanvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0.65; display: none; }
+    #webcam-container { position: absolute; inset: 0; display: none; width: 100%; height: 100%; background: #000; }
+    #webcam-container canvas { width: 100%; height: 100%; object-fit: contain; }
+
+    #axisSvg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .angle-control {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 8px 12px;
+      margin-bottom: 10px;
+      font-size: 0.85rem;
+    }
+    .angle-control-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 4px;
+    }
+    .angle-slider {
+      width: 100%;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+
+    /* 3개 버튼 균등 배치 */
+    .visual-tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+    .visual-tools .btn { padding: 9px 8px; font-size: 0.86rem; }
+
+    .ai-banner {
+      padding: 18px; border-radius: 14px; background: #eef2ff; border: 2px solid #818cf8; margin-bottom: 10px;
+      text-align: center;
+    }
+    .ai-banner-title { font-size: 1.45rem; font-weight: 900; color: #1e1b4b; }
+    .ai-banner-title .highlight-name {
+      color: #4f46e5;
+      background: #ffffff;
+      padding: 2px 12px;
+      border-radius: 8px;
+      border: 2px solid #6366f1;
+      display: inline-block;
+      margin: 0 4px;
+    }
+    .ai-banner-sub { font-size: 0.92rem; color: #3730a3; margin-top: 6px; font-weight: 600; }
+
+    .ai-notice {
+      background: #fef2f2;
+      border: 1.5px solid #fca5a5;
+      color: #991b1b;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 0.86rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 14px;
+    }
+
+    .prob-bars { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 14px; margin-bottom: 14px; }
+    .prob-row { font-size: 0.86rem; }
+    .prob-label { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 3px; }
+    .prob-bg { height: 12px; background: #e2e8f0; border-radius: 6px; overflow: hidden; }
+    .prob-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.25s; }
+
+    .dict-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; text-align: center; margin-top: 8px; }
+    .dict-table th, .dict-table td { border: 1px solid #cbd5e1; padding: 6px 8px; }
+    .dict-table th { background: #f8fafc; font-weight: 700; }
+    .dict-table tr.matched-row { background: #fef08a; font-weight: 800; border: 2px solid #eab308; }
+
+    /* 선대칭 / 점대칭 2열 균등 배치 */
+    .gfx-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 14px; }
+    .gfx-box { background: #f8fafc; border: 2px solid #cbd5e1; border-radius: 12px; padding: 14px 10px; text-align: center; }
+    .gfx-box.pass { background: #ecfdf5; border-color: #10b981; }
+    .gfx-name { font-size: 0.92rem; font-weight: 700; color: #334155; }
+    .gfx-val { font-size: 1.8rem; font-weight: 800; color: #0f172a; margin: 4px 0; }
+    .gfx-sub { font-size: 0.82rem; color: #475569; margin-bottom: 6px; font-weight: 600; }
+    .gfx-badge { display: inline-block; font-size: 0.8rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #e2e8f0; color: #475569; }
+    .gfx-box.pass .gfx-badge { background: #10b981; color: #fff; }
+
+    .gfx-verdict {
+      padding: 14px; border-radius: 12px; background: #f8fafc; border: 2px solid #cbd5e1;
+      font-weight: 700; color: #1e293b; font-size: 1.02rem; text-align: center;
+    }
+    .gfx-verdict.is-sym { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
+
+    .compare-card { background: #fffbeb; border: 2px solid #fde68a; border-radius: 16px; padding: 18px 20px; }
+    .compare-title { font-size: 1.15rem; font-weight: 800; color: #92400e; margin-bottom: 6px; }
+    .compare-desc { font-size: 0.96rem; color: #78350f; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📐 우리 반 대칭 탐구 연구소</h1>
+      <p class="subtitle">
+        💡 <strong>오늘의 탐구 안내:</strong> 그림은 <strong>위 8종(정삼각형·정사각형·직사각형·마름모·평행사변형·사다리꼴·원·정오각형)</strong>을 구분할 수 있어요!<br>
+        AI는 그림의 <strong>겉모습</strong>을 보고 도형 이름을 추측해 주고, 대칭 검사기는 기울어진 도형도 <strong>대칭축을 찾아 반으로 접거나 180° 돌려서</strong> 확인해 줍니다.
+      </p>
+      <div class="badge-row">
+        <span class="privacy-badge">🔒 개인정보 보호: 그린 그림과 사진은 외부로 전송·저장되지 않습니다</span>
+        <a href="./eval.html" class="nav-link">👉 교사용 평가 화면(eval.html) 이동</a>
+      </div>
+    </header>
+
+    <div class="main-grid">
+      <!-- 왼쪽: 모눈종이 그리기 & 이미지 입력 캔버스 -->
+      <div class="card">
+        <div class="card-title">
+          <span>✏️ 1. 모눈종이에 도형 그리기 / 넣기</span>
+          <span id="modelStatus" style="font-size:0.82rem; color:#64748b; font-weight:700;">⏳ 모델 불러오는 중...</span>
+        </div>
+
+        <div class="mode-tabs">
+          <button type="button" class="btn btn-secondary active" id="penModeBtn" style="flex:1;">✒️ 자유선</button>
+          <button type="button" class="btn btn-secondary" id="lineModeBtn" style="flex:1;">📏 직선 그리기</button>
+          <label for="fileInput" class="btn btn-secondary" style="flex:1; cursor:pointer;">📁 사진 올리기</label>
+          <input type="file" id="fileInput" accept="image/*" style="display:none;">
+          <button type="button" class="btn btn-secondary" id="webcamBtn" style="flex:1;">📷 카메라</button>
+        </div>
+
+        <div class="canvas-wrapper">
+          <canvas id="drawCanvas" width="360" height="360"></canvas>
+          <canvas id="overlayCanvas" width="360" height="360"></canvas>
+          <div id="webcam-container"></div>
+          <svg id="axisSvg" viewBox="0 0 360 360">
+            <line id="refLineV" x1="180" y1="0" x2="180" y2="360" stroke="rgba(148,163,184,0.4)" stroke-width="1.5" stroke-dasharray="4 4" />
+            <line id="refLineH" x1="0" y1="180" x2="360" y2="180" stroke="rgba(148,163,184,0.4)" stroke-width="1.5" stroke-dasharray="4 4" />
+            <line id="bestAxisLine" x1="180" y1="0" x2="180" y2="360" stroke="rgba(239,68,68,0.85)" stroke-width="2.5" stroke-dasharray="7 5" />
+            <circle id="centerDot" cx="180" cy="180" r="5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5" />
+          </svg>
+        </div>
+
+        <!-- 대칭축 각도 직접 돌려보기 슬라이더 -->
+        <div class="angle-control">
+          <div class="angle-control-head">
+            <span>🧭 대칭축 각도 직접 돌려보기</span>
+            <span id="angleReadout" style="color:var(--primary);">90° (세로축) · 일치율 0%</span>
+          </div>
+          <input type="range" id="angleSlider" class="angle-slider" min="0" max="179" value="90">
+        </div>
+
+        <!-- 시각적 접기·돌리기 체험 도구 (3개) -->
+        <div class="visual-tools">
+          <button type="button" class="btn btn-secondary" id="btnFoldBest" onclick="toggleVisualOverlay('bestAxis')">🪞 찾은 축 접기</button>
+          <button type="button" class="btn btn-secondary" id="btnRot180" onclick="toggleVisualOverlay('rot180')">🔄 180° 회전</button>
+          <button type="button" class="btn btn-secondary" id="btnMask" onclick="toggleVisualOverlay('mask')">👁️ 추출선 확인</button>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-primary" style="flex:2;" onclick="analyzeAll()">🔍 AI 도형 판정 + 대칭 검사 실행!</button>
+          <button type="button" class="btn btn-secondary" style="flex:1;" onclick="clearCanvas()">🧹 모두 지우기</button>
+        </div>
+      </div>
+
+      <!-- 오른쪽: AI 도형 이름 판정 + 교과서 대칭 사전 표 + 그래픽스 대칭 검사 -->
+      <div>
+        <div class="card">
+          <div class="card-title">
+            <span>🤖 1단계: 티처블머신 AI가 본 도형 이름</span>
+            <span style="font-size:0.8rem; color:#64748b;">실제 학습 모델(model.json) 추론 결과</span>
+          </div>
+
+          <div class="ai-banner" id="aiBanner">
+            <div class="ai-banner-title" id="aiResultTitle">
+              모눈종이에 도형을 그리거나 사진을 올려보세요!
+            </div>
+            <div class="ai-banner-sub" id="aiResultDesc">
+              그림은 위 8종(정삼각형·정사각형·직사각형·마름모·평행사변형·사다리꼴·원·정오각형)을 구분할 수 있어요.
+            </div>
+          </div>
+
+          <div class="ai-notice">
+            ⚠️ 안내: 본 프로그램의 AI 도형 판정 결과는 틀릴 수 있어요. 헷갈릴 때는 도형의 변과 각을 직접 확인하거나 선생님께 물어보세요.
+          </div>
+
+          <!-- 티처블머신 모델의 실제 클래스별 확률 막대 -->
+          <div class="prob-bars" id="probBarsContainer"></div>
+
+          <div style="font-size:0.9rem; font-weight:700; color:#334155; margin-top:4px;">
+            📚 5학년 수학 교과서 대칭 사전 (AI가 추측한 도형이 노란색으로 표시됩니다)
+          </div>
+          <table class="dict-table">
+            <thead>
+              <tr>
+                <th>도형 이름</th>
+                <th>선대칭도형</th>
+                <th>대칭축 개수</th>
+                <th>점대칭도형</th>
+                <th>교과서 핵심 성질</th>
+              </tr>
+            </thead>
+            <tbody id="dictTableBody">
+              <tr data-shape="정삼각형"><td>정삼각형</td><td>O</td><td>3개</td><td>X</td><td>반으로 접으면 겹치지만, 180° 돌리면 겹치지 않아요</td></tr>
+              <tr data-shape="정사각형"><td>정사각형</td><td>O</td><td>4개</td><td>O</td><td>접어도 완전히 겹치고, 180° 돌려도 완전히 겹쳐요</td></tr>
+              <tr data-shape="직사각형"><td>직사각형</td><td>O</td><td>2개</td><td>O</td><td>가로·세로 대칭축이 2개이고, 점대칭도형이에요</td></tr>
+              <tr data-shape="마름모"><td>마름모</td><td>O</td><td>2개</td><td>O</td><td>두 대각선이 대칭축이고, 180° 돌려도 겹쳐요</td></tr>
+              <tr data-shape="평행사변형"><td>평행사변형</td><td>X</td><td>0개</td><td>O</td><td>접으면 안 겹치지만, 180° 돌리면 정확히 겹쳐요!</td></tr>
+              <tr data-shape="사다리꼴"><td>사다리꼴(등변)</td><td>O</td><td>1개</td><td>X</td><td>양옆 길이가 같을 때 반으로 접으면 겹쳐요</td></tr>
+              <tr data-shape="원"><td>원</td><td>O</td><td>셀 수 없이 많음</td><td>O</td><td>어느 방향으로 접거나 180° 돌려도 항상 겹쳐요</td></tr>
+              <tr data-shape="정오각형"><td>정오각형</td><td>O</td><td>5개</td><td>X</td><td>꼭짓점을 지나는 선대칭축이 5개지만 점대칭은 아니에요</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 컴퓨터 그래픽스 픽셀 대칭 규칙 검사기 카드 -->
+        <div class="card">
+          <div class="card-title">
+            <span>🧮 2단계: 기울어진 축까지 찾아내는 '진짜 대칭 규칙' 검사기</span>
+            <span style="font-size:0.8rem; color:#059669;">기준: 85% 이상 대칭 성립</span>
+          </div>
+          <p style="font-size:0.88rem; color:#475569; margin-bottom:10px;">
+            그려진 도형의 선 픽셀을 추출해 <strong>0°~179° 모든 방향의 대칭축</strong>으로 접어보고, <strong>180° 회전</strong>과 함께 겹치는 비율(%)을 계산합니다.
+          </p>
+
+          <div class="gfx-grid">
+            <div class="gfx-box" id="boxBestAxis">
+              <div class="gfx-name">🪞 선대칭 검사 (최적 대칭축)</div>
+              <div class="gfx-val" id="valBestAxis">0%</div>
+              <div class="gfx-sub" id="subBestAxis">찾은 축: 대기 중</div>
+              <span class="gfx-badge" id="badgeBestAxis">대기 중</span>
+            </div>
+            <div class="gfx-box" id="boxRot180">
+              <div class="gfx-name">🔄 점대칭 검사 (180° 회전)</div>
+              <div class="gfx-val" id="valRot180">0%</div>
+              <div class="gfx-sub" id="subRot180">중심 기준 180° 돌리기</div>
+              <span class="gfx-badge" id="badgeRot180">대기 중</span>
+            </div>
+          </div>
+
+          <div class="gfx-verdict" id="gfxVerdict">
+            도형을 그리면 기울어진 대칭축을 자동으로 찾아 선대칭·점대칭 여부를 판정합니다.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="compare-card">
+      <div class="compare-title" id="compareTitle">🕵️ 생각 넓히기: AI는 이렇게 봤어요. 여러분 생각은 어때요?</div>
+      <div class="compare-desc" id="compareDesc">
+        모눈종이에 기울어진 도형도 자유롭게 그려보거나 학습지 사진을 올려보세요! AI의 추측 결과와 아래 대칭 검사기 결과를 비교하며 스스로 확인해 볼 수 있습니다.
+      </div>
+    </div>
+  </div>
+
+  <canvas id="tmInputCanvas" width="224" height="224" style="display:none;"></canvas>
+
+  <script>
+    const MODEL_URL = "./";
+    const CONFIDENCE_THRESHOLD = 0.7;
+    const SYMMETRY_PASS_RATIO = 85;
+
+    let model = null;
+    let classLabels = [];
+    let webcam = null;
+    let isWebcamRunning = false;
+    let lastSymResult = null;
+    let currentAxisAngle = 90;
+
+    const ALIAS_TO_SHAPE = {
+      "정삼각형": "정삼각형", "triangle": "정삼각형", "삼각형": "정삼각형",
+      "정사각형": "정사각형", "square": "정사각형",
+      "직사각형": "직사각형", "rect": "직사각형", "rectangle": "직사각형",
+      "마름모": "마름모", "rhombus": "마름모", "diamond": "마름모",
+      "평행사변형": "평행사변형", "para": "평행사변형", "parallelogram": "평행사변형",
+      "사다리꼴": "사다리꼴", "등변사다리꼴": "사다리꼴", "trapezoid": "사다리꼴",
+      "원": "원", "circle": "원",
+      "정오각형": "정오각형", "오각형": "정오각형", "pentagon": "정오각형"
+    };
+
+    const OLD_CLASS_MAP = {
+      "line": "선대칭도형(기존모델)",
+      "point": "점대칭도형(기존모델)",
+      "both": "모두대칭(기존모델)",
+      "none": "비대칭(기존모델)"
+    };
+
+    function toKoreanShapeName(rawLabel) {
+      const key = String(rawLabel).trim().toLowerCase();
+      if (ALIAS_TO_SHAPE[key]) return ALIAS_TO_SHAPE[key];
+      if (OLD_CLASS_MAP[key]) return OLD_CLASS_MAP[key];
+      return rawLabel;
+    }
+
+    function formatAngleLabel(deg) {
+      const d = ((Math.round(deg) % 180) + 180) % 180;
+      if (d === 0) return "0° (가로축)";
+      if (d === 90) return "90° (세로축)";
+      return `${d}° (기울어짐)`;
+    }
+
+    async function initModel() {
+      const statusEl = document.getElementById("modelStatus");
+      try {
+        model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
+        classLabels = model.getClassLabels();
+        renderProbBars();
+
+        const isOldModel = classLabels.every(c => ["line", "point", "both", "none"].includes(c.trim().toLowerCase()));
+        if (isOldModel) {
+          statusEl.style.color = "#d97706";
+          statusEl.textContent = "⚠️ 현재 예전 모델(line/point) 연결됨 (도형 이름 모델로 교체 필요)";
+        } else {
+          statusEl.style.color = "#059669";
+          statusEl.textContent = `✅ AI 모델 연결 완료 (${classLabels.length}개 클래스)`;
+        }
+      } catch (err) {
+        console.error("모델 로드 실패:", err);
+        statusEl.style.color = "#dc2626";
+        statusEl.textContent = "❌ model.json 로드 실패 (배포 주소 또는 서버에서 열어주세요)";
+      }
+    }
+
+    function renderProbBars() {
+      const container = document.getElementById("probBarsContainer");
+      container.innerHTML = "";
+      classLabels.forEach((label, idx) => {
+        const displayName = toKoreanShapeName(label);
+        const div = document.createElement("div");
+        div.className = "prob-row";
+        div.innerHTML = `
+          <div class="prob-label">
+            <span>${displayName}</span>
+            <span id="prob-txt-${idx}">0%</span>
+          </div>
+          <div class="prob-bg">
+            <div class="prob-fill" id="prob-bar-${idx}"></div>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    // =========================================================================
+    // 2. 모눈종이 캔버스 그리기 도구 (자유선 / 직선 모드)
+    // =========================================================================
+    const drawCanvas = document.getElementById("drawCanvas");
+    const drawCtx = drawCanvas.getContext("2d");
+    const overlayCanvas = document.getElementById("overlayCanvas");
+    const overlayCtx = overlayCanvas.getContext("2d");
+    const angleSlider = document.getElementById("angleSlider");
+
+    let drawMode = "pen";
+    let isDrawing = false;
+    let startX = 0, startY = 0;
+    let savedImageData = null;
+
+    drawCtx.lineWidth = 6;
+    drawCtx.lineCap = "round";
+    drawCtx.lineJoin = "round";
+    drawCtx.strokeStyle = "#0f172a";
+
+    document.getElementById("penModeBtn").addEventListener("click", () => {
+      drawMode = "pen";
+      document.getElementById("penModeBtn").classList.add("active");
+      document.getElementById("lineModeBtn").classList.remove("active");
+    });
+
+    document.getElementById("lineModeBtn").addEventListener("click", () => {
+      drawMode = "line";
+      document.getElementById("lineModeBtn").classList.add("active");
+      document.getElementById("penModeBtn").classList.remove("active");
+    });
+
+    function getCanvasPos(e) {
+      const rect = drawCanvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return {
+        x: (clientX - rect.left) * (drawCanvas.width / rect.width),
+        y: (clientY - rect.top) * (drawCanvas.height / rect.height)
+      };
+    }
+
+    function startDraw(e) {
+      if (isWebcamRunning) stopWebcam();
+      hideVisualOverlay();
+      isDrawing = true;
+      const pos = getCanvasPos(e);
+      startX = pos.x;
+      startY = pos.y;
+      savedImageData = drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height);
+
+      if (drawMode === "pen") {
+        drawCtx.beginPath();
+        drawCtx.moveTo(startX, startY);
+      }
+    }
+
+    function moveDraw(e) {
+      if (!isDrawing) return;
+      e.preventDefault();
+      const pos = getCanvasPos(e);
+
+      if (drawMode === "pen") {
+        drawCtx.lineTo(pos.x, pos.y);
+        drawCtx.stroke();
+      } else if (drawMode === "line") {
+        drawCtx.putImageData(savedImageData, 0, 0);
+        drawCtx.beginPath();
+        drawCtx.moveTo(startX, startY);
+        drawCtx.lineTo(pos.x, pos.y);
+        drawCtx.stroke();
+      }
+    }
+
+    function endDraw() {
+      if (!isDrawing) return;
+      isDrawing = false;
+      analyzeAll();
+    }
+
+    drawCanvas.addEventListener("mousedown", startDraw);
+    drawCanvas.addEventListener("mousemove", moveDraw);
+    window.addEventListener("mouseup", endDraw);
+
+    drawCanvas.addEventListener("touchstart", startDraw, { passive: false });
+    drawCanvas.addEventListener("touchmove", moveDraw, { passive: false });
+    window.addEventListener("touchend", endDraw);
+
+    function clearCanvas() {
+      stopWebcam();
+      hideVisualOverlay();
+      lastSymResult = null;
+      drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+      resetAxisGuide();
+      document.querySelectorAll("#dictTableBody tr").forEach(tr => tr.classList.remove("matched-row"));
+      document.getElementById("aiResultTitle").textContent = "모눈종이에 도형을 그리거나 사진을 올려보세요!";
+      document.getElementById("aiResultDesc").textContent = "그림은 위 8종(정삼각형·정사각형·직사각형·마름모·평행사변형·사다리꼴·원·정오각형)을 구분할 수 있어요.";
+      document.getElementById("valBestAxis").textContent = "0%";
+      document.getElementById("subBestAxis").textContent = "찾은 축: 대기 중";
+      document.getElementById("valRot180").textContent = "0%";
+      document.getElementById("angleReadout").textContent = "90° (세로축) · 일치율 0%";
+      ["BestAxis", "Rot180"].forEach(k => {
+        document.getElementById(`box${k}`).classList.remove("pass");
+        document.getElementById(`badge${k}`).textContent = "대기 중";
+      });
+      document.getElementById("gfxVerdict").textContent = "도형을 그리면 기울어진 대칭축을 자동으로 찾아 선대칭·점대칭 여부를 판정합니다.";
+      document.getElementById("gfxVerdict").classList.remove("is-sym");
+    }
+
+    function resetAxisGuide() {
+      currentAxisAngle = 90;
+      angleSlider.value = 90;
+      drawAxisSvg(180, 180, 90, false);
+    }
+
+    function drawAxisSvg(cx, cy, deg, isPass) {
+      const rad = (deg * Math.PI) / 180;
+      const len = 420;
+      const x1 = cx - Math.cos(rad) * len;
+      const y1 = cy - Math.sin(rad) * len;
+      const x2 = cx + Math.cos(rad) * len;
+      const y2 = cy + Math.sin(rad) * len;
+
+      const bestLine = document.getElementById("bestAxisLine");
+      bestLine.setAttribute("x1", x1.toFixed(1));
+      bestLine.setAttribute("y1", y1.toFixed(1));
+      bestLine.setAttribute("x2", x2.toFixed(1));
+      bestLine.setAttribute("y2", y2.toFixed(1));
+      bestLine.setAttribute("stroke", isPass ? "#059669" : "rgba(239,68,68,0.85)");
+      bestLine.setAttribute("stroke-width", isPass ? "3" : "2.2");
+
+      const refV = document.getElementById("refLineV");
+      refV.setAttribute("x1", cx.toFixed(1));
+      refV.setAttribute("x2", cx.toFixed(1));
+
+      const refH = document.getElementById("refLineH");
+      refH.setAttribute("y1", cy.toFixed(1));
+      refH.setAttribute("y2", cy.toFixed(1));
+
+      const dot = document.getElementById("centerDot");
+      dot.setAttribute("cx", cx.toFixed(1));
+      dot.setAttribute("cy", cy.toFixed(1));
+      dot.setAttribute("fill", isPass ? "#059669" : "#ef4444");
+    }
+
+    angleSlider.addEventListener("input", function () {
+      const deg = Number(this.value);
+      currentAxisAngle = deg;
+      if (!lastSymResult || !lastSymResult.valid) {
+        drawAxisSvg(180, 180, deg, false);
+        document.getElementById("angleReadout").textContent = `${formatAngleLabel(deg)} · 일치율 0%`;
+        return;
+      }
+      const liveScore = evaluateAxisScoreFast(lastSymResult, deg, lastSymResult.centerX, lastSymResult.centerY);
+      const isPass = liveScore >= SYMMETRY_PASS_RATIO;
+      drawAxisSvg(lastSymResult.centerX, lastSymResult.centerY, deg, isPass);
+      document.getElementById("angleReadout").textContent = `${formatAngleLabel(deg)} · 일치율 ${liveScore}%`;
+      renderFoldOverlay(lastSymResult.centerX, lastSymResult.centerY, deg);
+    });
+
+    // =========================================================================
+    // 3. 컴퓨터 그래픽스 전 방향(0°~179°) 대칭축 탐색 + 180° 회전 검사
+    // =========================================================================
+    function evaluateAxisScoreFast(sym, deg, cx, cy) {
+      const { W, H, scoreMap, samplePixels } = sym;
+      const rad = (deg * Math.PI) / 180;
+      const cosR = Math.cos(rad);
+      const sinR = Math.sin(rad);
+      const cos2 = Math.cos(2 * rad);
+      const sin2 = Math.sin(2 * rad);
+
+      let sumScore = 0;
+      let validCount = 0;
+
+      for (let i = 0; i < samplePixels.length; i++) {
+        const p = samplePixels[i];
+        const dx = p.x - cx;
+        const dy = p.y - cy;
+
+        const perpDist = Math.abs(-dx * sinR + dy * cosR);
+        if (perpDist < 3) continue;
+
+        validCount++;
+        const rx = Math.round(cx + dx * cos2 + dy * sin2);
+        const ry = Math.round(cy + dx * sin2 - dy * cos2);
+        if (rx >= 0 && rx < W && ry >= 0 && ry < H) {
+          sumScore += scoreMap[ry * W + rx];
+        }
+      }
+      if (validCount < 15) return 0;
+      return Math.round((sumScore / validCount) * 100);
+    }
+
+    function computePixelSymmetry(canvasEl) {
+      const W = canvasEl.width;
+      const H = canvasEl.height;
+      const ctx = canvasEl.getContext("2d");
+      const imgData = ctx.getImageData(0, 0, W, H).data;
+
+      let transparentCount = 0;
+      const gray = new Float32Array(W * H);
+
+      for (let i = 0; i < W * H; i++) {
+        const idx = i * 4;
+        const a = imgData[idx + 3];
+        if (a < 50) {
+          transparentCount++;
+          gray[i] = 255;
+        } else {
+          gray[i] = 0.299 * imgData[idx] + 0.587 * imgData[idx + 1] + 0.114 * imgData[idx + 2];
+        }
+      }
+
+      const grid = new Uint8Array(W * H);
+      const inkPixels = [];
+      const isDirectDrawing = (transparentCount > W * H * 0.25);
+
+      if (isDirectDrawing) {
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            const i = y * W + x;
+            if (imgData[i * 4 + 3] >= 80 && gray[i] < 180) {
+              grid[i] = 1;
+              inkPixels.push({ x, y });
+            }
+          }
+        }
+      } else {
+        const margin = Math.round(W * 0.06);
+        const contrast = new Float32Array(W * H);
+        const contrastList = [];
+        const R = 7;
+
+        for (let y = margin; y < H - margin; y++) {
+          for (let x = margin; x < W - margin; x++) {
+            const i = y * W + x;
+            const localBg = (
+              gray[(y - R) * W + x] +
+              gray[(y + R) * W + x] +
+              gray[y * W + (x - R)] +
+              gray[y * W + (x + R)] +
+              gray[(y - R) * W + (x - R)] +
+              gray[(y + R) * W + (x + R)]
+            ) / 6;
+            const diff = localBg - gray[i];
+            if (diff > 18) {
+              contrast[i] = diff;
+              contrastList.push(diff);
+            }
+          }
+        }
+
+        if (contrastList.length > 50) {
+          contrastList.sort((a, b) => b - a);
+          const maxKeep = Math.min(contrastList.length, Math.floor(W * H * 0.06));
+          const dynamicThresh = Math.max(28, contrastList[Math.floor(maxKeep * 0.65)] || 28);
+
+          for (let y = margin; y < H - margin; y++) {
+            for (let x = margin; x < W - margin; x++) {
+              const i = y * W + x;
+              if (contrast[i] >= dynamicThresh) {
+                grid[i] = 1;
+                inkPixels.push({ x, y });
+              }
+            }
+          }
+        }
+      }
+
+      if (inkPixels.length < 40) {
+        return {
+          rot180: 0,
+          bestLineScore: 0, bestAngle: 90,
+          valid: false, grid, centerX: W / 2, centerY: H / 2
+        };
+      }
+
+      let sumX = 0, sumY = 0;
+      for (let i = 0; i < inkPixels.length; i++) {
+        sumX += inkPixels[i].x;
+        sumY += inkPixels[i].y;
+      }
+      const centroidX = sumX / inkPixels.length;
+      const centroidY = sumY / inkPixels.length;
+
+      const scoreMap = new Float32Array(W * H);
+      for (let i = 0; i < inkPixels.length; i++) {
+        const px = inkPixels[i].x;
+        const py = inkPixels[i].y;
+        for (let dy = -3; dy <= 3; dy++) {
+          const ny = py + dy;
+          if (ny < 0 || ny >= H) continue;
+          const dy2 = dy * dy;
+          for (let dx = -3; dx <= 3; dx++) {
+            const nx = px + dx;
+            if (nx < 0 || nx >= W) continue;
+            const dSq = dx * dx + dy2;
+            if (dSq > 9) continue;
+            const val = Math.exp(-dSq / 4.5);
+            const idx = ny * W + nx;
+            if (val > scoreMap[idx]) scoreMap[idx] = val;
+          }
+        }
+      }
+
+      const step = Math.max(1, Math.floor(inkPixels.length / 900));
+      const samplePixels = [];
+      for (let i = 0; i < inkPixels.length; i += step) {
+        samplePixels.push(inkPixels[i]);
+      }
+
+      const symData = { W, H, scoreMap, samplePixels };
+
+      let coarseBestAngle = 90;
+      let coarseBestScore = -1;
+      for (let deg = 0; deg < 180; deg += 3) {
+        const sc = evaluateAxisScoreFast(symData, deg, centroidX, centroidY);
+        if (sc > coarseBestScore) {
+          coarseBestScore = sc;
+          coarseBestAngle = deg;
+        }
+      }
+
+      let bestLineScore = 0;
+      let bestAngle = coarseBestAngle;
+      let bestCX = centroidX;
+      let bestCY = centroidY;
+      const perpOffsets = [-2, 0, 2];
+
+      for (let d = -3; d <= 3; d++) {
+        const deg = ((coarseBestAngle + d) % 180 + 180) % 180;
+        const rad = (deg * Math.PI) / 180;
+        const nx = -Math.sin(rad);
+        const ny = Math.cos(rad);
+
+        for (const off of perpOffsets) {
+          const cx = centroidX + nx * off;
+          const cy = centroidY + ny * off;
+          const sc = evaluateAxisScoreFast(symData, deg, cx, cy);
+          if (sc > bestLineScore) {
+            bestLineScore = sc;
+            bestAngle = deg;
+            bestCX = cx;
+            bestCY = cy;
+          }
+        }
+      }
+
+      let rot180 = 0;
+      const offsets = [-2, 0, 2];
+      for (const ox of offsets) {
+        for (const oy of offsets) {
+          const cx = centroidX + ox;
+          const cy = centroidY + oy;
+          let sumScore = 0;
+          let validCount = 0;
+
+          for (let i = 0; i < samplePixels.length; i++) {
+            const p = samplePixels[i];
+            if (Math.hypot(p.x - cx, p.y - cy) < 4) continue;
+            validCount++;
+            const rx = Math.round(2 * cx - p.x);
+            const ry = Math.round(2 * cy - p.y);
+            if (rx >= 0 && rx < W && ry >= 0 && ry < H) {
+              sumScore += scoreMap[ry * W + rx];
+            }
+          }
+          const score = validCount > 15 ? Math.round((sumScore / validCount) * 100) : 0;
+          if (score > rot180) rot180 = score;
+        }
+      }
+
+      return {
+        W, H,
+        rot180,
+        bestLineScore, bestAngle,
+        valid: true,
+        grid, scoreMap, samplePixels,
+        centerX: bestCX, centerY: bestCY
+      };
+    }
+
+    // =========================================================================
+    // 4. 시각적 반 접기(기울어진 축 포함) / 180도 회전 / 추출된 선 확인 오버레이
+    // =========================================================================
+    let currentOverlayMode = null;
+
+    function hideVisualOverlay() {
+      currentOverlayMode = null;
+      overlayCanvas.style.display = "none";
+      document.querySelectorAll(".visual-tools .btn").forEach(b => b.classList.remove("active"));
+    }
+
+    function renderFoldOverlay(cx, cy, deg) {
+      const W = drawCanvas.width;
+      const H = drawCanvas.height;
+      const rad = (deg * Math.PI) / 180;
+
+      overlayCtx.clearRect(0, 0, W, H);
+      overlayCtx.save();
+      overlayCtx.translate(cx, cy);
+      overlayCtx.rotate(rad);
+      overlayCtx.scale(1, -1);
+      overlayCtx.rotate(-rad);
+      overlayCtx.translate(-cx, -cy);
+      overlayCtx.filter = "hue-rotate(150deg)";
+      overlayCtx.drawImage(drawCanvas, 0, 0);
+      overlayCtx.restore();
+      overlayCanvas.style.display = "block";
+    }
+
+    function toggleVisualOverlay(mode) {
+      if (currentOverlayMode === mode) {
+        hideVisualOverlay();
+        return;
+      }
+      hideVisualOverlay();
+      currentOverlayMode = mode;
+
+      const btnMap = {
+        bestAxis: "btnFoldBest",
+        rot180: "btnRot180",
+        mask: "btnMask"
+      };
+      if (btnMap[mode]) document.getElementById(btnMap[mode]).classList.add("active");
+
+      const W = drawCanvas.width;
+      const H = drawCanvas.height;
+      overlayCtx.clearRect(0, 0, W, H);
+
+      if (mode === "mask") {
+        if (!lastSymResult || !lastSymResult.valid) return;
+        const outImg = overlayCtx.createImageData(W, H);
+        for (let i = 0; i < W * H; i++) {
+          if (lastSymResult.grid[i] === 1) {
+            outImg.data[i * 4] = 16;
+            outImg.data[i * 4 + 1] = 185;
+            outImg.data[i * 4 + 2] = 129;
+            outImg.data[i * 4 + 3] = 255;
+          }
+        }
+        overlayCtx.putImageData(outImg, 0, 0);
+        overlayCanvas.style.display = "block";
+        return;
+      }
+
+      const cx = lastSymResult ? lastSymResult.centerX : W / 2;
+      const cy = lastSymResult ? lastSymResult.centerY : H / 2;
+
+      if (mode === "bestAxis") {
+        const deg = lastSymResult && lastSymResult.valid ? lastSymResult.bestAngle : currentAxisAngle;
+        angleSlider.value = deg;
+        drawAxisSvg(cx, cy, deg, lastSymResult && lastSymResult.bestLineScore >= SYMMETRY_PASS_RATIO);
+        renderFoldOverlay(cx, cy, deg);
+        return;
+      }
+
+      if (mode === "rot180") {
+        overlayCtx.save();
+        overlayCtx.translate(cx, cy);
+        overlayCtx.rotate(Math.PI);
+        overlayCtx.translate(-cx, -cy);
+        overlayCtx.filter = "hue-rotate(150deg)";
+        overlayCtx.drawImage(drawCanvas, 0, 0);
+        overlayCtx.restore();
+        overlayCanvas.style.display = "block";
+      }
+    }
+
+    // =========================================================================
+    // 5. 실제 티처블머신 모델(model.predict) + 전 방향 대칭 검사 실행
+    // =========================================================================
+    async function analyzeAll() {
+      const sym = computePixelSymmetry(drawCanvas);
+      lastSymResult = sym;
+      updateAxisGuidePosition(sym);
+      updateGraphicsUI(sym);
+
+      if (!sym.valid) return;
+
+      if (!model) {
+        document.getElementById("aiResultTitle").textContent = "⚠️ 티처블머신 모델 파일을 불러오지 못했습니다.";
+        document.getElementById("aiResultDesc").textContent = "폴더 안에 model.json, metadata.json, weights.bin 파일이 있는지 확인해 주세요.";
+        return;
+      }
+
+      const tmCanvas = document.getElementById("tmInputCanvas");
+      const tmCtx = tmCanvas.getContext("2d");
+      tmCtx.fillStyle = "#ffffff";
+      tmCtx.fillRect(0, 0, 224, 224);
+      tmCtx.drawImage(drawCanvas, 0, 0, 224, 224);
+
+      const predictions = await model.predict(tmCanvas);
+      let bestLabel = "";
+      let bestProb = 0;
+
+      predictions.forEach((p, idx) => {
+        const pct = Math.round(p.probability * 100);
+        const txtEl = document.getElementById(`prob-txt-${idx}`);
+        const barEl = document.getElementById(`prob-bar-${idx}`);
+        if (txtEl && barEl) {
+          txtEl.textContent = `${pct}%`;
+          barEl.style.width = `${pct}%`;
+        }
+        if (p.probability > bestProb) {
+          bestProb = p.probability;
+          bestLabel = p.className;
+        }
+      });
+
+      const korShapeName = toKoreanShapeName(bestLabel);
+      updateAIBannerUI(korShapeName, bestProb, bestLabel);
+      updateComparisonBanner(korShapeName, bestProb, sym);
+    }
+
+    function updateAxisGuidePosition(sym) {
+      if (!sym || !sym.valid) {
+        resetAxisGuide();
+        return;
+      }
+      currentAxisAngle = sym.bestAngle;
+      angleSlider.value = sym.bestAngle;
+      const isPass = sym.bestLineScore >= SYMMETRY_PASS_RATIO;
+      drawAxisSvg(sym.centerX, sym.centerY, sym.bestAngle, isPass);
+      document.getElementById("angleReadout").textContent =
+        `${formatAngleLabel(sym.bestAngle)} · 일치율 ${sym.bestLineScore}%`;
+    }
+
+    function updateGraphicsUI(sym) {
+      const items = [
+        {
+          key: "BestAxis",
+          val: sym.bestLineScore,
+          sub: sym.valid ? `찾은 축: ${formatAngleLabel(sym.bestAngle)}` : "찾은 축: 대기 중"
+        },
+        {
+          key: "Rot180",
+          val: sym.rot180,
+          sub: "중심 기준 180° 돌리기"
+        }
+      ];
+
+      items.forEach(item => {
+        const box = document.getElementById(`box${item.key}`);
+        const valEl = document.getElementById(`val${item.key}`);
+        const subEl = document.getElementById(`sub${item.key}`);
+        const badgeEl = document.getElementById(`badge${item.key}`);
+
+        valEl.textContent = `${item.val}%`;
+        subEl.textContent = item.sub;
+        if (sym.valid && item.val >= SYMMETRY_PASS_RATIO) {
+          box.classList.add("pass");
+          badgeEl.textContent = `🟢 대칭 성립 (≥${SYMMETRY_PASS_RATIO}%)`;
+        } else {
+          box.classList.remove("pass");
+          badgeEl.textContent = sym.valid ? `⚪ 불일치 (<${SYMMETRY_PASS_RATIO}%)` : "대기 중";
+        }
+      });
+
+      const verdictEl = document.getElementById("gfxVerdict");
+      if (!sym.valid) {
+        verdictEl.classList.remove("is-sym");
+        verdictEl.textContent = "모눈종이에 도형을 더 뚜렷하게 그려주세요.";
+        return;
+      }
+
+      const isLineSym = (sym.bestLineScore >= SYMMETRY_PASS_RATIO);
+      const isPointSym = (sym.rot180 >= SYMMETRY_PASS_RATIO);
+      const axisText = formatAngleLabel(sym.bestAngle);
+
+      if (isLineSym && isPointSym) {
+        verdictEl.classList.add("is-sym");
+        verdictEl.textContent = `🟪 대칭 검사 결과: ${axisText}으로 접어도 겹치고(${sym.bestLineScore}%), 180° 돌려도 겹치는(${sym.rot180}%) [선대칭도형이자 점대칭도형]입니다!`;
+      } else if (isLineSym) {
+        verdictEl.classList.add("is-sym");
+        verdictEl.textContent = `🟦 대칭 검사 결과: ${axisText}으로 반을 접었을 때 ${sym.bestLineScore}% 겹치는 [선대칭도형]입니다! (점대칭은 아님)`;
+      } else if (isPointSym) {
+        verdictEl.classList.add("is-sym");
+        verdictEl.textContent = `🟩 대칭 검사 결과: 어느 축으로 접어도 안 겹치지만, 180° 돌리면 ${sym.rot180}% 겹치는 [점대칭도형]입니다! (선대칭은 아님)`;
+      } else {
+        verdictEl.classList.remove("is-sym");
+        verdictEl.textContent = `⬜ 대칭 검사 결과: 모든 방향의 접기(${sym.bestLineScore}%)와 180° 돌리기(${sym.rot180}%) 모두 기준(${SYMMETRY_PASS_RATIO}%) 미만이므로 [대칭이 아닌 일반 도형]입니다!`;
+      }
+    }
+
+    function updateAIBannerUI(korShapeName, maxProb, rawLabel) {
+      const titleEl = document.getElementById("aiResultTitle");
+      const descEl = document.getElementById("aiResultDesc");
+      const bannerEl = document.getElementById("aiBanner");
+
+      document.querySelectorAll("#dictTableBody tr").forEach(tr => tr.classList.remove("matched-row"));
+
+      const pct = Math.round(maxProb * 100);
+      const isOldClass = ["line", "point", "both", "none"].includes(String(rawLabel).trim().toLowerCase());
+
+      if (isOldClass) {
+        bannerEl.style.background = "#fef3c7";
+        bannerEl.style.borderColor = "#f59e0b";
+        titleEl.innerHTML = `🤖 현재 모델 판정: <span class="highlight-name">${korShapeName}</span> (${pct}%)`;
+        descEl.textContent = `💡 아직 이전 4개 클래스(line/point/both/none) 모델 파일이 들어있습니다. 티처블머신에서 8가지 도형 이름으로 새로 학습시켜 model.json을 교체하면 도형 이름이 표시됩니다!`;
+        return;
+      }
+
+      if (maxProb <= CONFIDENCE_THRESHOLD) {
+        bannerEl.style.background = "#fef3c7";
+        bannerEl.style.borderColor = "#f59e0b";
+        titleEl.innerHTML = `🤔 잘 모르겠어요! <span style="font-size:1rem;">(${korShapeName} ${pct}%)</span>`;
+        descEl.textContent = `확신도가 70% 이하로 낮아요. 그림은 위 8종 도형만 구분할 수 있지만, 아래 대칭 검사기로 대칭인지 직접 확인해 보세요!`;
+      } else {
+        bannerEl.style.background = "#eef2ff";
+        bannerEl.style.borderColor = "#818cf8";
+        titleEl.innerHTML = `🤖 AI는 <span class="highlight-name">${korShapeName}</span> 같아요! (${pct}%)`;
+        descEl.textContent = `AI는 이렇게 봤어요. 여러분 생각은 어때요? 아래 표에서 [${korShapeName}]의 대칭 성질을 직접 확인해 보세요!`;
+
+        const matchedRow = document.querySelector(`#dictTableBody tr[data-shape="${korShapeName}"]`);
+        if (matchedRow) matchedRow.classList.add("matched-row");
+      }
+    }
+
+    function updateComparisonBanner(korShapeName, aiProb, sym) {
+      const titleEl = document.getElementById("compareTitle");
+      const descEl = document.getElementById("compareDesc");
+      if (!sym.valid) return;
+
+      const isLine = (sym.bestLineScore >= SYMMETRY_PASS_RATIO);
+      const isPoint = (sym.rot180 >= SYMMETRY_PASS_RATIO);
+      const isNone = (!isLine && !isPoint);
+
+      if (isNone) {
+        titleEl.textContent = "🔎 관찰 결과: 대칭이 아닌 일반 도형이에요!";
+        descEl.textContent = `어느 방향으로 접거나 180° 돌려보아도 겹치는 비율이 낮아서 선대칭도형도, 점대칭도형도 아닙니다.`;
+      } else if (aiProb <= CONFIDENCE_THRESHOLD && (isLine || isPoint)) {
+        titleEl.textContent = "💡 신기한 발견! AI는 잘 모르겠다고 했지만, 대칭 검사기는 대칭을 찾아냈어요!";
+        descEl.textContent = `AI가 구분할 수 있는 위 8종 도형이 아니어도, 기울어진 대칭축으로 직접 접거나 180° 돌려서 겹치면(${Math.max(sym.bestLineScore, sym.rot180)}%) 대칭도형이라는 것을 알 수 있어요!`;
+      } else {
+        titleEl.textContent = `🕵️ 확인 완료! AI는 ${korShapeName} 같다고 봤어요. 여러분 생각은 어때요?`;
+        descEl.textContent = `AI 판정 결과는 틀릴 수도 있으니, 아래 대칭 검사기가 찾은 대칭축(${formatAngleLabel(sym.bestAngle)}, ${sym.bestLineScore}%)과 도형의 변·각을 직접 비교해 보세요.`;
+      }
+    }
+
+    document.getElementById("fileInput").addEventListener("change", function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      stopWebcam();
+      hideVisualOverlay();
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const img = new Image();
+        img.onload = function() {
+          drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+          drawCtx.drawImage(img, 0, 0, drawCanvas.width, drawCanvas.height);
+          analyzeAll();
+        };
+        img.src = evt.target.result;
+      };
+      reader.readAsDataURL(file);
+      e.target.value = "";
+    });
+
+    document.getElementById("webcamBtn").addEventListener("click", async function() {
+      if (isWebcamRunning) {
+        stopWebcam();
+        return;
+      }
+      try {
+        webcam = new tmImage.Webcam(360, 360, false);
+        await webcam.setup({ facingMode: "environment" });
+        if (webcam.webcam) {
+          webcam.webcam.setAttribute("playsinline", true);
+          webcam.webcam.setAttribute("muted", true);
+        }
+        await webcam.play();
+        isWebcamRunning = true;
+        document.getElementById("webcamBtn").textContent = "📸 촬영 캡처";
+
+        const container = document.getElementById("webcam-container");
+        container.innerHTML = "";
+        container.appendChild(webcam.canvas);
+        container.style.display = "block";
+        window.requestAnimationFrame(loopWebcam);
+      } catch (err) {
+        alert("카메라 권한을 허용해 주시거나 배포 주소(https)에서 접속해 주세요.");
+      }
+    });
+
+    function loopWebcam() {
+      if (!isWebcamRunning) return;
+      webcam.update();
+      window.requestAnimationFrame(loopWebcam);
+    }
+
+    function stopWebcam() {
+      if (webcam && isWebcamRunning) {
+        drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+        drawCtx.drawImage(webcam.canvas, 0, 0, drawCanvas.width, drawCanvas.height);
+        webcam.stop();
+        isWebcamRunning = false;
+        document.getElementById("webcamBtn").textContent = "📷 카메라";
+        document.getElementById("webcam-container").style.display = "none";
+        analyzeAll();
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", initModel);
+  </script>
+</body>
+</html>

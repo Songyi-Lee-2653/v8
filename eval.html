@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>교사용 8종 도형 AI 모델 고정 평가 화면 (eval.html)</title>
+  <!-- index.html과 동일한 버전 고정 유지 -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: 'Pretendard', 'Malgun Gothic', sans-serif; }
+    body { background: #f1f5f9; color: #0f172a; margin: 0; padding: 24px; }
+    .container { max-width: 1180px; margin: 0 auto; }
+    .card { background: #fff; border-radius: 16px; padding: 22px; box-shadow: 0 4px 14px rgba(0,0,0,0.05); margin-bottom: 18px; }
+    header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    h1 { margin: 0; font-size: 1.45rem; color: #0f172a; }
+    .sub { color: #64748b; font-size: 0.88rem; margin-top: 6px; }
+    .nav-link { text-decoration: none; color: #4f46e5; font-weight: 700; font-size: 0.92rem; }
+    .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .btn { padding: 11px 18px; border: none; border-radius: 10px; font-weight: 800; font-size: 0.92rem; cursor: pointer; color: #fff; transition: 0.15s; }
+    .btn-blue { background: #4f46e5; } .btn-blue:hover { background: #4338ca; }
+    .btn-gray { background: #64748b; } .btn-gray:hover { background: #475569; }
+    .btn-green { background: #059669; } .btn-green:hover { background: #047857; }
+    .status { font-weight: 700; color: #1e293b; margin-left: 6px; font-size: 0.92rem; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(122px, 1fr)); gap: 10px; }
+    .stat-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 8px; text-align: center; }
+    .stat-box.main { background: #eef2ff; border-color: #818cf8; }
+    .stat-box.warn { background: #fffbeb; border-color: #fcd34d; }
+    .stat-label { font-size: 0.78rem; color: #475569; font-weight: 700; }
+    .stat-val { font-size: 1.35rem; font-weight: 900; color: #1e1b4b; margin: 4px 0; }
+    .stat-box.warn .stat-val { color: #b45309; }
+    .stat-sub { font-size: 0.75rem; color: #64748b; }
+    h2 { font-size: 1.1rem; margin: 0 0 12px; color: #1e293b; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    th, td { border: 1px solid #e2e8f0; padding: 8px 6px; text-align: center; }
+    th { background: #f8fafc; font-weight: 800; color: #334155; }
+    .cm-diag { background: #dcfce7; font-weight: 900; color: #166534; }
+    .cm-err { background: #fee2e2; font-weight: 800; color: #991b1b; }
+    .thumb { width: 42px; height: 42px; border-radius: 6px; border: 1px solid #cbd5e1; object-fit: cover; background: #fff; }
+    .ok-badge { background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 999px; font-weight: 800; }
+    .no-badge { background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 999px; font-weight: 800; }
+    .low-badge { background: #fef3c7; color: #b45309; padding: 2px 8px; border-radius: 999px; font-weight: 800; font-size: 0.78rem; }
+    .table-wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <header>
+        <div>
+          <h1>📊 교사용 8종 도형 AI 모델 고정 평가 화면 (eval.html)</h1>
+          <div class="sub">
+            파일명 규칙: 영문클래스명_번호.png (예: <code>triangle_01.png</code>, <code>square_test_01.png</code>)<br>
+            🔒 선택한 사진은 외부로 전송되지 않으며 브라우저 안에서만 채점됩니다.
+          </div>
+        </div>
+        <a href="./index.html" class="nav-link">👉 학생용 화면(index.html)으로 이동</a>
+      </header>
+    </div>
+
+    <div class="card">
+      <div class="controls">
+        <input type="file" id="fileInput" accept="image/*" multiple style="display:none;">
+        <button class="btn btn-blue" id="selectBtn">📁 1. 평가용 사진 한꺼번에 선택</button>
+        <button class="btn btn-gray" id="resetBtn">🔄 초기화</button>
+        <button class="btn btn-green" id="csvBtn">📥 결과 CSV 내려받기</button>
+        <span class="status" id="statusText">⏳ AI 모델(model.json)을 불러오는 중입니다...</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="summary-grid" id="summaryGrid"></div>
+    </div>
+
+    <div class="card">
+      <h2>2. 혼동행렬 (Confusion Matrix: 행 = 실제 정답, 열 = AI 예측)</h2>
+      <div class="table-wrap">
+        <table id="cmTable"></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>3. 이미지별 상세 채점 결과</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>번호</th>
+              <th>미리보기</th>
+              <th>파일명</th>
+              <th>실제 정답</th>
+              <th>AI 예측</th>
+              <th>확신도</th>
+              <th>70% 기준</th>
+              <th>정오</th>
+            </tr>
+          </thead>
+          <tbody id="detailBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- index.html과 완전히 동일한 전처리를 위한 숨김 캔버스 -->
+  <canvas id="prepDrawCanvas" width="360" height="360" style="display:none;"></canvas>
+  <canvas id="tmInputCanvas" width="224" height="224" style="display:none;"></canvas>
+
+  <script>
+    const MODEL_URL = "./";
+    const CONFIDENCE_THRESHOLD = 0.7;
+
+    const CLASSES = [
+      { en: "triangle",      ko: "정삼각형" },
+      { en: "square",        ko: "정사각형" },
+      { en: "rectangle",     ko: "직사각형" },
+      { en: "rhombus",       ko: "마름모" },
+      { en: "parallelogram", ko: "평행사변형" },
+      { en: "trapezoid",     ko: "사다리꼴" },
+      { en: "circle",        ko: "원" },
+      { en: "pentagon",      ko: "정오각형" }
+    ];
+    const CLASS_KEYS = CLASSES.map(c => c.en);
+    const KO_MAP = Object.fromEntries(CLASSES.map(c => [c.en, c.ko]));
+
+    let model = null;
+    let evalRows = [];
+
+    async function loadModel() {
+      const statusEl = document.getElementById("statusText");
+      try {
+        model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
+        const labels = model.getClassLabels();
+        statusEl.style.color = "#059669";
+        statusEl.textContent = `✅ AI 모델 준비 완료 (${labels.length}개 클래스)! 평가용 사진을 선택하세요.`;
+      } catch (err) {
+        console.error(err);
+        statusEl.style.color = "#dc2626";
+        statusEl.textContent = "❌ model.json 로드 실패 (배포 주소 또는 서버에서 열어주세요)";
+      }
+    }
+    loadModel();
+
+    function normalizeLabel(raw) {
+      const s = String(raw || "").trim().toLowerCase();
+      if (CLASS_KEYS.includes(s)) return s;
+      const alias = {
+        "정삼각형": "triangle", "삼각형": "triangle",
+        "정사각형": "square",
+        "직사각형": "rectangle", "rect": "rectangle",
+        "마름모": "rhombus", "diamond": "rhombus",
+        "평행사변형": "parallelogram", "para": "parallelogram",
+        "사다리꼴": "trapezoid", "등변사다리꼴": "trapezoid",
+        "원": "circle",
+        "정오각형": "pentagon", "오각형": "pentagon"
+      };
+      return alias[s] || s;
+    }
+
+    function parseTrueLabel(filename) {
+      const lower = filename.toLowerCase();
+      for (const key of CLASS_KEYS) {
+        if (lower.startsWith(key + "_") || lower.startsWith(key + "-") || lower.includes("_" + key + "_")) {
+          return key;
+        }
+      }
+      return null;
+    }
+
+    function loadImage(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          const img = new Image();
+          img.onload = () => resolve({ img, src: e.target.result });
+          img.onerror = reject;
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // index.html과 동일한 전처리: 360x360 캔버스 -> 224x224 흰색 배경 캔버스
+    function preprocessLikeStudentApp(img) {
+      const drawCanvas = document.getElementById("prepDrawCanvas");
+      const drawCtx = drawCanvas.getContext("2d");
+      drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+      drawCtx.drawImage(img, 0, 0, drawCanvas.width, drawCanvas.height);
+
+      const tmCanvas = document.getElementById("tmInputCanvas");
+      const tmCtx = tmCanvas.getContext("2d");
+      tmCtx.fillStyle = "#ffffff";
+      tmCtx.fillRect(0, 0, 224, 224);
+      tmCtx.drawImage(drawCanvas, 0, 0, 224, 224);
+
+      return tmCanvas;
+    }
+
+    function renderResults() {
+      const summaryGrid = document.getElementById("summaryGrid");
+      const cmTable = document.getElementById("cmTable");
+      const detailBody = document.getElementById("detailBody");
+
+      const total = evalRows.length;
+      const correct = evalRows.filter(r => r.isCorrect).length;
+      const lowConfCount = evalRows.filter(r => r.confidence <= CONFIDENCE_THRESHOLD).length;
+      const acc = total ? ((correct / total) * 100).toFixed(1) : "0.0";
+
+      // 혼동행렬 집계
+      const cm = {};
+      CLASS_KEYS.forEach(r => {
+        cm[r] = {};
+        CLASS_KEYS.forEach(c => { cm[r][c] = 0; });
+      });
+      evalRows.forEach(row => {
+        if (cm[row.trueLabel] && cm[row.trueLabel][row.predLabel] !== undefined) {
+          cm[row.trueLabel][row.predLabel]++;
+        }
+      });
+
+      // 1. 요약 카드
+      summaryGrid.innerHTML = `
+        <div class="stat-box main">
+          <div class="stat-label">전체 정확도</div>
+          <div class="stat-val">${acc}%</div>
+          <div class="stat-sub">${correct} / ${total}장</div>
+        </div>
+        <div class="stat-box warn">
+          <div class="stat-label">70% 이하 (보류)</div>
+          <div class="stat-val">${lowConfCount}장</div>
+          <div class="stat-sub">전체 중 ${total ? ((lowConfCount / total) * 100).toFixed(1) : "0.0"}%</div>
+        </div>
+      `;
+      CLASSES.forEach(cls => {
+        const sub = evalRows.filter(r => r.trueLabel === cls.en);
+        const subOk = sub.filter(r => r.isCorrect).length;
+        const subAcc = sub.length ? ((subOk / sub.length) * 100).toFixed(1) + "%" : "-";
+        summaryGrid.innerHTML += `
+          <div class="stat-box">
+            <div class="stat-label">${cls.ko} (${cls.en})</div>
+            <div class="stat-val">${subAcc}</div>
+            <div class="stat-sub">${subOk} / ${sub.length}장</div>
+          </div>
+        `;
+      });
+
+      // 2. 혼동행렬 표
+      let html = "<thead><tr><th>실제 \\ 예측</th>";
+      CLASSES.forEach(c => { html += `<th>${c.ko}<br><small>${c.en}</small></th>`; });
+      html += "<th>정분류율</th></tr></thead><tbody>";
+
+      CLASSES.forEach(r => {
+        const rowSum = CLASS_KEYS.reduce((s, c) => s + cm[r.en][c], 0);
+        const rowAcc = rowSum ? ((cm[r.en][r.en] / rowSum) * 100).toFixed(1) + "%" : "-";
+        html += `<tr><th>${r.ko} (${r.en})</th>`;
+        CLASSES.forEach(c => {
+          const v = cm[r.en][c.en];
+          const clsName = v === 0 ? "" : (r.en === c.en ? "cm-diag" : "cm-err");
+          html += `<td class="${clsName}">${v}</td>`;
+        });
+        html += `<td><strong>${rowAcc}</strong> (${cm[r.en][r.en]}/${rowSum})</td></tr>`;
+      });
+      html += "</tbody>";
+      cmTable.innerHTML = html;
+
+      // 3. 상세 표
+      detailBody.innerHTML = "";
+      evalRows.forEach((row, idx) => {
+        const isLow = row.confidence <= CONFIDENCE_THRESHOLD;
+        detailBody.innerHTML += `
+          <tr>
+            <td>${idx + 1}</td>
+            <td><img class="thumb" src="${row.src}"></td>
+            <td>${row.fileName}</td>
+            <td>${KO_MAP[row.trueLabel]} (${row.trueLabel})</td>
+            <td>${KO_MAP[row.predLabel] || row.predLabel} (${row.predLabel})</td>
+            <td>${(row.confidence * 100).toFixed(1)}%</td>
+            <td>${isLow ? '<span class="low-badge">잘 모르겠어요 (≤70%)</span>' : '확신 (>70%)'}</td>
+            <td><span class="${row.isCorrect ? "ok-badge" : "no-badge"}">${row.isCorrect ? "정답 O" : "오답 X"}</span></td>
+          </tr>
+        `;
+      });
+    }
+
+    document.getElementById("selectBtn").addEventListener("click", () => {
+      if (!model) { alert("AI 모델이 아직 로드되지 않았습니다."); return; }
+      document.getElementById("fileInput").click();
+    });
+
+    document.getElementById("fileInput").addEventListener("change", async (e) => {
+      const files = Array.from(e.target.files);
+      if (!files.length) return;
+      const statusEl = document.getElementById("statusText");
+      statusEl.style.color = "#1e293b";
+      statusEl.textContent = `⏳ 총 ${files.length}장 평가 중...`;
+
+      evalRows = [];
+      let skipped = 0;
+      for (const file of files) {
+        const trueLabel = parseTrueLabel(file.name);
+        if (!trueLabel) { skipped++; continue; }
+        const { img, src } = await loadImage(file);
+        const inputCanvas = preprocessLikeStudentApp(img);
+        const preds = await model.predict(inputCanvas);
+        preds.sort((a, b) => b.probability - a.probability);
+        const top = preds[0];
+        const predLabel = normalizeLabel(top.className);
+        evalRows.push({
+          fileName: file.name,
+          src,
+          trueLabel,
+          predLabel,
+          confidence: top.probability,
+          isCorrect: trueLabel === predLabel
+        });
+      }
+
+      renderResults();
+      const ok = evalRows.filter(r => r.isCorrect).length;
+      const acc = evalRows.length ? ((ok / evalRows.length) * 100).toFixed(1) : "0.0";
+      statusEl.style.color = "#059669";
+      statusEl.textContent = `✅ 총 ${evalRows.length}장 평가 완료! (전체 정확도: ${acc}%${skipped ? `, 파일명 미인식 ${skipped}장 제외` : ""})`;
+      e.target.value = "";
+    });
+
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      evalRows = [];
+      document.getElementById("summaryGrid").innerHTML = "";
+      document.getElementById("cmTable").innerHTML = "";
+      document.getElementById("detailBody").innerHTML = "";
+      const statusEl = document.getElementById("statusText");
+      statusEl.style.color = "#1e293b";
+      statusEl.textContent = "초기화 완료! 평가용 사진을 선택하세요.";
+    });
+
+    document.getElementById("csvBtn").addEventListener("click", () => {
+      if (!evalRows.length) { alert("먼저 평가를 실행해 주세요."); return; }
+      const header = "파일명,실제정답,AI예측,확신도(%),70%이하보류,정오\n";
+      const body = evalRows.map(r =>
+        `${r.fileName},${r.trueLabel},${r.predLabel},${(r.confidence * 100).toFixed(1)},${r.confidence <= CONFIDENCE_THRESHOLD ? "Y" : "N"},${r.isCorrect ? "O" : "X"}`
+      ).join("\n");
+      const blob = new Blob(["\uFEFF" + header + body], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "eval_8shapes_result.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  </script>
+</body>
+</html>
